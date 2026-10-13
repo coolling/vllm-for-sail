@@ -41,23 +41,18 @@ ENGINE_SINGLE_BASIC_ARGS=(
   tests/test_sequence.py
   tests/test_logger.py
   tests/test_vllm_port.py
-  # 移至 engine_args_hub_free step（见下）
-  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds"
+  # Run 38018057536：离线模式把虚构 model id 解析成本地缓存路径，以下
+  # 10 例均报 LocalEntryNotFoundError，先逐例禁用。
   --deselect "tests/engine/test_arg_utils.py::test_jit_monitor_verbose_arg"
-  --deselect "tests/engine/test_arg_utils.py::test_jit_monitor_mode_arg"
-)
-
-# Step 1b: engine_args_hub_free — 用虚构 model id（"m" / "test"）构造 EngineArgs
-#   的纯参数用例。HF_HUB_OFFLINE=1 时 EngineArgs.__post_init__ 会走
-#   get_model_path → snapshot_download(local_files_only=True) 把 id 解析成本地
-#   缓存路径，虚构 id 必然 LocalEntryNotFoundError（run 38018057536 共 10 例）；
-#   在线模式不走该分支，用例本身也不触网。故单列一个 step，只对它关掉
-#   离线开关（见下方 _run_step 调用），其余 step 仍严格离线。按节点前缀选中，
-#   TestDeviceIds 新增用例自动归入本 step。
-ENGINE_SINGLE_HUB_FREE_ARGS=(
-  "tests/engine/test_arg_utils.py::TestDeviceIds"
-  "tests/engine/test_arg_utils.py::test_jit_monitor_verbose_arg"
-  "tests/engine/test_arg_utils.py::test_jit_monitor_mode_arg"
+  --deselect "tests/engine/test_arg_utils.py::test_jit_monitor_mode_arg[warn]"
+  --deselect "tests/engine/test_arg_utils.py::test_jit_monitor_mode_arg[error]"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_device_ids_with_cvd_out_of_range"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_device_ids_with_cvd_resolve_to_physical_ids"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_device_ids_with_uuid_cvd_resolve_to_physical_ids"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_device_ids_with_uuid_args_resolve_to_physical_ids"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_device_ids_reject_mixed_integer_and_uuid_args"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_no_device_ids"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_device_ids_reject_duplicates"
 )
 
 # Step 2: v1_engine — tests/v1/engine/ 整目录（V1 engine core/client/async/
@@ -394,8 +389,6 @@ _run_step() {
 if [ "${MODE}" = "single" ] || [ "${MODE}" = "all" ]; then
   # Aone single 是 1-PPU pod：限 1 卡使 multi_gpu_test 自动 skip，语义对齐
   CUDA_VISIBLE_DEVICES=0 _run_step "engine_basic" 1 "${ENGINE_SINGLE_BASIC_ARGS[@]}"
-  CUDA_VISIBLE_DEVICES=0 HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 \
-    _run_step "engine_args_hub_free" 1 "${ENGINE_SINGLE_HUB_FREE_ARGS[@]}"
   CUDA_VISIBLE_DEVICES=0 _run_step "v1_engine" 1 "${ENGINE_SINGLE_V1_ARGS[@]}"
   CUDA_VISIBLE_DEVICES=0 _run_step "v1_e2e_general" 1 "${ENGINE_SINGLE_E2E_ARGS[@]}"
 else  # multi

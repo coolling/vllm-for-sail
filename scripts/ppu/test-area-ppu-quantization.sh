@@ -111,6 +111,10 @@ QUANT_CORE_ARGS=(
   --deselect "tests/quantization/test_auto_round.py::test_auto_round_model[auto_round:mxfp4:qwen3-1p7b]"
   --deselect "tests/quantization/test_auto_round.py::test_auto_round_model[auto_round:w4a16:qwen3-30b-a3b]"
   --deselect "tests/quantization/test_auto_round.py::test_auto_round_model[auto_round:mxfp4:qwen3-30b-a3b]"
+  # Run 38018057536：在线 FP8 per-channel 缺少 cutlass scaled-mm kernel；
+  # int8 MoE oracle 在 PPU 正确选择 PPU_DEEPGEMM，与用例的 TRITON 预期不同。
+  --deselect "tests/quantization/test_fp8_per_channel.py::test_fp8_per_channel_online_quantization"
+  --deselect "tests/quantization/test_int8_moe_oracle.py::test_int8_dynamic_schemes_dispatch_to_triton[weight_key0-activation_key0]"
   # Run 34580922394: Jamba-tiny-random 引擎启动时 ModelConfig ValidationError
   # （红区 staged 快照内容不被 vllm 接受）；plamo 变体自身 skip。
   --deselect "tests/quantization/test_experts_int8.py::test_model_experts_int8_startup[4-bfloat16-ai21labs/Jamba-tiny-random]"
@@ -149,6 +153,10 @@ QUANT_MODELS_ARGS=(
   # SM8.0）；同文件 int8 用例通过，故 -k 精确排除而非整文件 ignore。
   -k
   "not fp8_per_token_head"
+  # Run 38018057536：PPU 缺少这两种 FP8 per-channel 模型所需的
+  # cutlass_scaled_mm_sm80_epilogue kernel，先逐例禁用。
+  --deselect "tests/models/quantization/test_fp8_per_channel.py::test_fp8_per_channel_logprobs[dense]"
+  --deselect "tests/models/quantization/test_fp8_per_channel.py::test_fp8_per_channel_logprobs[moe]"
 )
 
 # quantization_bitsandbytes = test_bitsandbytes.py 的部分跑：BNB 4bit/8bit，
