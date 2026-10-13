@@ -40,7 +40,6 @@ mkdir -p "${RESULTS_DIR}" "${TMP_JUNIT}"
 # 5 errors during collection，0 用例执行），故装不上硬失败。
 # cohere_melody（cuda.in 同段）不装：仅 CohereRenderer 实例化与 cohere tool parser
 # 模块导入时才惰性 import，本 area 选集只解析 renderer 类、不触发。
-# 镜像包已由 ppu_install_dependency.sh [constraints] 冻结，这里只会新增包。
 # 重试理由同 test-area-ppu-models-basic.sh [deps]：索引并发拉包时瞬时返回
 # 空版本列表，pip --retries 不覆盖。
 PIP_INSTALL="python3 -m pip install --no-cache-dir --retries 5 --timeout 30"

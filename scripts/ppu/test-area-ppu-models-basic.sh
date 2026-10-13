@@ -37,10 +37,8 @@ mkdir -p "${RESULTS_DIR}" "${TMP_JUNIT}"
 # terratorch 刻意不装：它只服务 Prithvi/Terratorch 两个 registry 用例，依赖链
 # （torchgeo/lightning/albumentations…）却会改写镜像包——run 38018057536 实测
 # 把 numpy 1.26.4 升到 2.5.3（另升 scipy/scikit-learn/huggingface_hub），镜像
-# numba 随即 import 失败，Inkling 系 3 个 registry 用例连带变红。ppu_install_
-# dependency.sh [constraints] 冻结镜像包后它要么长时间回溯要么无解，装它
-# 只有成本。缺包时上游 test_registry_imports 自带 find_spec 守卫，两个用例
-# 自动 SKIP，无需 deselect。
+# numba 随即 import 失败，Inkling 系 3 个 registry 用例连带变红。缺包时上游
+# test_registry_imports 自带 find_spec 守卫，两个用例自动 SKIP，无需 deselect。
 # 恢复条件：mirror 上出现与镜像 numpy/numba 兼容的 terratorch 依赖链。
 PIP_INSTALL="python3 -m pip install --no-cache-dir --retries 5 --timeout 30"
 PPU_PIP_INDEX="https://pkg.flytiger-eco.com/artifactory/api/pypi/pypi_index/simple"
