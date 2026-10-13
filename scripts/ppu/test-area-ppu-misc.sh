@@ -314,6 +314,10 @@ MODEL_MAP = {
         "/nas_aisw/datasets/checkpoints/LLM/gemma/v1.0/gemma-3-1b-it",  # aone
     "hmellor/tiny-random-LlamaForCausalLM":
         "/nas_aisw/datasets/checkpoints/LLM/tiny/v1.0/tiny-random-LlamaForCausalLM",  # aone
+    # v0.27 新增引用：v1/spec_decode/test_vocab_mapping.py::
+    # test_detect_space_prefix_real_tokenizers（run 38018057536 未映射 → 离线报错）
+    "HuggingFaceTB/SmolLM2-135M-Instruct":
+        "/nas_aisw/datasets/checkpoints/LLM/SmolLM/v2.0/SmolLM2-135M-Instruct",  # cleaned
     "ibm-granite/granite-4.0-tiny-preview":
         "/nas_aisw/datasets/checkpoints/LLM/granite/v1.0/granite-4.0-tiny-preview",  # aone
     "llava-hf/llava-1.5-7b-hf":

@@ -1,0 +1,225 @@
+# SDK 2.2 + vLLM 0.27 定向复验：只重跑 run 38018057536 里失败的 9 个 area。
+#
+# 为什么另起 workflow：PR 分支一 push 就会触发 ci.yml 的 synchronize，而这次修复
+# 改到了 ppu_install_dependency.sh，该脚本在每个 area 的 check-changes 路径里，
+# 结果就是 22 个 area 全部扇出，跑满约 2h24m 的关键路径。本文件只编排这 9 个 area，
+# 不经过 precheck / ai-review / human-review 门禁。
+#
+# 用法：
+#   push：git push origin HEAD:ppu-verify/<任意名>
+#         ci.yml 只监听 pull_request，向非 PR 分支 push 不会触发全量 CI；
+#         push 时固定跑全部 9 个 area，并现编 wheel。
+#   dispatch：本文件合入默认分支后可用，支持选 area 子集、跳过 wheel 构建。
+#             workflow_dispatch 只认默认分支上的 workflow 文件。
+#
+# 编排：plan → build-wheel（可选）→ 9 个 area 并行 → verify 聚合。
+#   9 个 area 合计 11 卡（compile、model-runner-v2 各 2 卡，其余各 1 卡），低于
+#   ci.yml batch1 的 15 卡水位，所以不分批。
+#   关键路径 ≈ wheel 15m + kernels ~2h21m（耗时取自 run 38018057536）。
+#   各 area 被 workflow_call 调用时，event 是 push 或 workflow_dispatch，
+#   其 check-changes 会走「非 PR 必跑」分支，不受路径过滤影响。
+#   各 area 的 concurrency 以 github.ref 分组，与 PR 上的 CI run 互不取消。
+name: PPU v0.27 SDK2.2 Verify (failed areas)
+
+on:
+  push:
+    branches: ["ppu-verify/**"]
+  workflow_dispatch:
+    inputs:
+      areas:
+        description: "逗号分隔的 area 子集，留空表示全部 9 个，如 engine,misc"
+        type: string
+        default: ""
+      use_ci_wheel:
+        description: "true：现编 wheel（与 PR CI 一致）；false：直接用镜像预装的 vllm，省约 15 分钟"
+        type: boolean
+        default: true
+
+concurrency:
+  group: ppu-sdk22-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read # 透传 area：被调用方的权限只能降不能升
+  pull-requests: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      areas: ${{ steps.plan.outputs.areas }}
+      build_wheel: ${{ steps.plan.outputs.build_wheel }}
+    steps:
+      - name: Resolve area set
+        id: plan
+        env:
+          INPUT_AREAS: ${{ inputs.areas }}
+          INPUT_USE_CI_WHEEL: ${{ inputs.use_ci_wheel }}
+        run: |
+          all="models-basic entrypoints quantization compile misc engine kernels benchmarks model-runner-v2"
+          req="$(echo "${INPUT_AREAS:-}" | tr ',' ' ' | xargs)"
+          [ -n "${req}" ] || req="${all}"
+          for a in ${req}; do
+            case " ${all} " in
+              *" ${a} "*) ;;
+              *) echo "::error::unknown area '${a}' (allowed: ${all})"; exit 1 ;;
+            esac
+          done
+          # 首尾加逗号做定界，下游用 contains(',<area>,') 精确匹配
+          echo "areas=,${req// /,}," >> "$GITHUB_OUTPUT"
+          # push 事件下 inputs 为空，按默认现编 wheel
+          if [ "${INPUT_USE_CI_WHEEL:-true}" = "false" ]; then bw=false; else bw=true; fi
+          echo "build_wheel=${bw}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### PPU SDK2.2 verify plan"
+            echo ""
+            echo "- areas: \`${req}\`"
+            echo "- CI-built wheel: \`${bw}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build-wheel:
+    name: Build PPU Wheel
+    needs: plan
+    if: needs.plan.outputs.build_wheel == 'true'
+    uses: ./.github/workflows/build-ppu-wheel.yml
+
+  # 放行条件：plan 成功、area 在本次选集内、wheel 就绪（或本次不编 wheel）。
+  # 必须带 always()：build-wheel 被跳过时，默认行为会把下游 job 一并跳过。
+  ppu-models-basic:
+    needs: [plan, build-wheel]
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      contains(needs.plan.outputs.areas, ',models-basic,') &&
+      (needs.build-wheel.result == 'success' || needs.plan.outputs.build_wheel != 'true')
+    uses: ./.github/workflows/test-area-ppu-models-basic.yml
+    with:
+      wheel_artifact: ${{ needs.build-wheel.outputs.artifact_name }}
+    secrets: inherit
+
+  ppu-entrypoints:
+    needs: [plan, build-wheel]
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      contains(needs.plan.outputs.areas, ',entrypoints,') &&
+      (needs.build-wheel.result == 'success' || needs.plan.outputs.build_wheel != 'true')
+    uses: ./.github/workflows/test-area-ppu-entrypoints.yml
+    with:
+      wheel_artifact: ${{ needs.build-wheel.outputs.artifact_name }}
+    secrets: inherit
+
+  ppu-quantization:
+    needs: [plan, build-wheel]
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      contains(needs.plan.outputs.areas, ',quantization,') &&
+      (needs.build-wheel.result == 'success' || needs.plan.outputs.build_wheel != 'true')
+    uses: ./.github/workflows/test-area-ppu-quantization.yml
+    with:
+      wheel_artifact: ${{ needs.build-wheel.outputs.artifact_name }}
+    secrets: inherit
+
+  ppu-compile:
+    needs: [plan, build-wheel]
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      contains(needs.plan.outputs.areas, ',compile,') &&
+      (needs.build-wheel.result == 'success' || needs.plan.outputs.build_wheel != 'true')
+    uses: ./.github/workflows/test-area-ppu-compile.yml
+    with:
+      wheel_artifact: ${{ needs.build-wheel.outputs.artifact_name }}
+    secrets: inherit
+
+  ppu-misc:
+    needs: [plan, build-wheel]
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      contains(needs.plan.outputs.areas, ',misc,') &&
+      (needs.build-wheel.result == 'success' || needs.plan.outputs.build_wheel != 'true')
+    uses: ./.github/workflows/test-area-ppu-misc.yml
+    with:
+      wheel_artifact: ${{ needs.build-wheel.outputs.artifact_name }}
+    secrets: inherit
+
+  ppu-engine:
+    needs: [plan, build-wheel]
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      contains(needs.plan.outputs.areas, ',engine,') &&
+      (needs.build-wheel.result == 'success' || needs.plan.outputs.build_wheel != 'true')
+    uses: ./.github/workflows/test-area-ppu-engine.yml
+    with:
+      wheel_artifact: ${{ needs.build-wheel.outputs.artifact_name }}
+    secrets: inherit
+
+  ppu-kernels:
+    needs: [plan, build-wheel]
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      contains(needs.plan.outputs.areas, ',kernels,') &&
+      (needs.build-wheel.result == 'success' || needs.plan.outputs.build_wheel != 'true')
+    uses: ./.github/workflows/test-area-ppu-kernels.yml
+    with:
+      wheel_artifact: ${{ needs.build-wheel.outputs.artifact_name }}
+    secrets: inherit
+
+  ppu-benchmarks:
+    needs: [plan, build-wheel]
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      contains(needs.plan.outputs.areas, ',benchmarks,') &&
+      (needs.build-wheel.result == 'success' || needs.plan.outputs.build_wheel != 'true')
+    uses: ./.github/workflows/test-area-ppu-benchmarks.yml
+    with:
+      wheel_artifact: ${{ needs.build-wheel.outputs.artifact_name }}
+    secrets: inherit
+
+  ppu-model-runner-v2:
+    needs: [plan, build-wheel]
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      contains(needs.plan.outputs.areas, ',model-runner-v2,') &&
+      (needs.build-wheel.result == 'success' || needs.plan.outputs.build_wheel != 'true')
+    uses: ./.github/workflows/test-area-ppu-model-runner-v2.yml
+    with:
+      wheel_artifact: ${{ needs.build-wheel.outputs.artifact_name }}
+    secrets: inherit
+
+  # 聚合点：skipped 视为通过，因为未选中的 area 一定是 skipped。
+  # wheel 构建失败时，所有 area 也会被跳过，但 build-wheel 自身的 failure 会让本 job 失败。
+  verify:
+    name: Verify result
+    needs:
+      - plan
+      - build-wheel
+      - ppu-models-basic
+      - ppu-entrypoints
+      - ppu-quantization
+      - ppu-compile
+      - ppu-misc
+      - ppu-engine
+      - ppu-kernels
+      - ppu-benchmarks
+      - ppu-model-runner-v2
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all dependent job statuses
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
+        run: |
+          python3 -c "
+          import json, sys, os
+          needs = json.loads(os.environ['NEEDS_JSON'])
+          failed = []
+          for job, info in needs.items():
+              result = info.get('result', 'unknown')
+              print(f'{job}: {result}')
+              if result not in ('success', 'skipped'):
+                  failed.append(f'{job} ({result})')
+          if failed:
+              print('Failed jobs: ' + ','.join(failed))
+              sys.exit(1)
+          print('All jobs completed successfully')
+          "

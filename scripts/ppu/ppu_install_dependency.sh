@@ -169,6 +169,34 @@ echo "========== [deps] pytest toolchain =========="
 _pip_retry pytest pytest-asyncio tblib pytest-shard pyyaml
 
 # ------------------------------------------------------------------------------
+# [constraints] 冻结镜像包版本：其后 area 脚本的 pip install 只增不改
+# ------------------------------------------------------------------------------
+# 核心原则（见文件头）落到机制上：area [deps] 补装的测试依赖若要求升/降镜像
+# 已有的包，pip 只能回溯到兼容版本或报 ResolutionImpossible，不能静默改动
+# 被测栈。实证：run 38018057536 models-basic 装 terratorch 把镜像 numpy
+# 1.26.4 升到 2.5.3，镜像 numba（numpy<2.5）随即 import 失败，Inkling 系
+# registry 用例全红——测到的已不是镜像本身。
+# 落到 pip 用户级配置而非 export PIP_CONSTRAINT：本脚本与
+# test-area-ppu-<area>.sh 是同一 Pod 内两个独立 bash 进程，环境变量传不过去。
+# 构建工具不入约束：constraint 同样作用于 build isolation 环境，钉死镜像里的
+# setuptools 等会让 sdist 构建因 build-system.requires 不满足而失败。
+# 排障确需改动镜像包时，用 `python3 -m pip --isolated install ...` 绕过。
+echo "========== [constraints] freeze image packages =========="
+PPU_IMAGE_CONSTRAINTS="${PPU_IMAGE_CONSTRAINTS:-/tmp/ppu-image-constraints.txt}"
+PPU_BUILD_TOOLS_RE='^(pip|setuptools|setuptools[-_]scm|wheel|packaging|cython|cmake|ninja'
+PPU_BUILD_TOOLS_RE+='|hatchling|hatch[-_]vcs|flit[-_]core|scikit[-_]build[-_]core'
+PPU_BUILD_TOOLS_RE+='|poetry[-_]core|maturin|meson|meson[-_]python|pybind11)=='
+python3 -m pip list --format=freeze 2>/dev/null \
+    | grep -viE "${PPU_BUILD_TOOLS_RE}" > "${PPU_IMAGE_CONSTRAINTS}"
+python3 -m pip config --user set install.constraint "${PPU_IMAGE_CONSTRAINTS}"
+# PIP_CONFIG_FILE=/dev/null 等镜像环境会让用户级配置失效，显式核对一次
+if [[ "$(python3 -m pip config get install.constraint 2>/dev/null)" != "${PPU_IMAGE_CONSTRAINTS}" ]]; then
+    echo "[constraints] ERROR: pip config install.constraint not effective" >&2
+    exit 1
+fi
+echo "[constraints] $(wc -l < "${PPU_IMAGE_CONSTRAINTS}") pins -> ${PPU_IMAGE_CONSTRAINTS}"
+
+# ------------------------------------------------------------------------------
 # [cext] 源码树补齐编译产物：镜像预装 vllm 的 C 扩展 → REPO_ROOT/vllm
 # ------------------------------------------------------------------------------
 # pytest 以 REPO_ROOT 为 rootdir，tests 包（tests/__init__.py）使 REPO_ROOT 被

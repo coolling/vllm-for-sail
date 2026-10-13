@@ -237,9 +237,11 @@ kernels 3 文件等）至少完成 root cause 定位，否则信噪比无法评�
   云 runner 上的 Clean workspace 空操作；每项单独改、单独跑，便于归因。
 - Node.js 20 弃用告警：checkout@v4 等被平台强制跑 Node 24，适时升级 action 大版本。
 - nightly 构建流水线（PR #6）合入 main 后评估脚本收敛，避免双份漂移。
-- terratorch 恢复跟踪：mirror 上 stringzilla 只剩 FlyTiger 壳包（无官方 wheel),
-  当前 terratorch 安装走容错分支；FlyTiger 补发产物后恢复并复测
-  `test_registry_imports[PrithviGeoSpatialMAE]/[Terratorch]` 两个 deselect。
+- terratorch 恢复跟踪：models-basic 已不再安装 terratorch——其依赖链把镜像 numpy
+  1.26.4 升到 2.5.3（run 38018057536），导致镜像 numba 不可用；缺包时
+  `test_registry_imports[PrithviGeoSpatialMAE]/[Terratorch]` 由上游 find_spec 守卫
+  自动 SKIP。mirror 提供与镜像 numpy/numba 兼容的依赖链（含 stringzilla 官方
+  wheel）后再恢复安装并复测。
 
 ---
 

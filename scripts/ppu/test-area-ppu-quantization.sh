@@ -100,6 +100,17 @@ QUANT_CORE_ARGS=(
   # 失败（PPU torch_call_dispatcher aten::sum dim_IntList API call failed）；
   # 同文件 OPEA/Qwen2.5 变体通过。恢复条件：PPU aten::sum 修复后移除。
   --deselect "tests/quantization/test_auto_round.py::test_auto_round[Intel/Qwen2-0.5B-Instruct-int4-sym-AutoRound]"
+  # Run 38018057536: v0.27 新增/更换的检查点未入库（scripts/ppu/model_alises/
+  # 清单 MISS），离线 LocalEntryNotFoundError：
+  #   Qwen/Qwen2-1.5B-Instruct-AWQ、INC4AI/Qwen3-8B-MXFP8-AR、
+  #   INCModel/Qwen3-1.7B-AutoRound-MXFP4-W4A4、
+  #   INCModel/Qwen3-30B-A3B-12L-{W4A16,MXFP4}-test
+  # 恢复条件：检查点入库并在 MODEL_MAP 补路径后移除对应行。
+  --deselect "tests/quantization/test_auto_awq.py::test_auto_awq_quantization_method[Qwen/Qwen2-1.5B-Instruct-AWQ]"
+  --deselect "tests/quantization/test_auto_round.py::test_auto_round_model[auto_round:llm_compressor_mxfp8]"
+  --deselect "tests/quantization/test_auto_round.py::test_auto_round_model[auto_round:mxfp4:qwen3-1p7b]"
+  --deselect "tests/quantization/test_auto_round.py::test_auto_round_model[auto_round:w4a16:qwen3-30b-a3b]"
+  --deselect "tests/quantization/test_auto_round.py::test_auto_round_model[auto_round:mxfp4:qwen3-30b-a3b]"
   # Run 34580922394: Jamba-tiny-random 引擎启动时 ModelConfig ValidationError
   # （红区 staged 快照内容不被 vllm 接受）；plamo 变体自身 skip。
   --deselect "tests/quantization/test_experts_int8.py::test_model_experts_int8_startup[4-bfloat16-ai21labs/Jamba-tiny-random]"
