@@ -143,13 +143,17 @@ MRV2_PIPELINE_PARALLELISM_ARGS=(
   # 2 例多模态加载失败（whisper-large-v3-turbo feature extractor 未入 NAS
   # 缓存，离线 OSError）。同文件其余 8 例通过，保留。
   # 恢复条件：PP 崩溃修复 / whisper 系列入库后逐个放开。
+  # v0.27 上游 TEST_MODELS 把 InternVL2-1B 换成 OpenGVLab/InternVL3-1B，原
+  # InternVL2-1B setup0 deselect 成了死 id；InternVL3-1B 未入库（model_alises
+  # 清单 MISS），run 38018057536 离线 ValueError: Invalid repository ID。
+  # 恢复条件：InternVL3-1B 入库并在 MODEL_MAP 补路径后移除。
   --deselect "tests/distributed/test_pipeline_parallel.py::test_tp_language_generation[hmellor/Ilama-3.2-1B-parallel_setup13-mp-auto-test_options13]"
   --deselect "tests/distributed/test_pipeline_parallel.py::test_tp_language_generation[microsoft/Phi-3.5-MoE-instruct-parallel_setup14-mp-auto-test_options14]"
   --deselect "tests/distributed/test_pipeline_parallel.py::test_tp_language_generation[microsoft/Phi-3.5-MoE-instruct-parallel_setup16-mp-auto-test_options16]"
   --deselect "tests/distributed/test_pipeline_parallel.py::test_tp_language_generation[microsoft/Phi-3.5-MoE-instruct-parallel_setup18-mp-auto-test_options18]"
   --deselect "tests/distributed/test_pipeline_parallel.py::test_tp_language_generation[microsoft/Phi-3.5-MoE-instruct-parallel_setup20-mp-auto-test_options20]"
   --deselect "tests/distributed/test_pipeline_parallel.py::test_tp_language_generation[microsoft/Phi-3.5-MoE-instruct-parallel_setup22-mp-auto-test_options22]"
-  --deselect "tests/distributed/test_pipeline_parallel.py::test_tp_multimodal_generation[OpenGVLab/InternVL2-1B-parallel_setup0-mp-auto-test_options0]"
+  --deselect "tests/distributed/test_pipeline_parallel.py::test_tp_multimodal_generation[OpenGVLab/InternVL3-1B-parallel_setup0-mp-auto-test_options0]"
   --deselect "tests/distributed/test_pipeline_parallel.py::test_tp_multimodal_generation[fixie-ai/ultravox-v0_5-llama-3_2-1b-parallel_setup2-mp-auto-test_options2]"
 )
 
@@ -308,8 +312,9 @@ MODEL_MAP = {
         "/nas_aisw/datasets/checkpoints/LLM/e5/v1/e5-mistral-7b-instruct",
     "BAAI/bge-multilingual-gemma2":
         "/nas_aisw/datasets/checkpoints/LLM/bge/v1.0/bge-multilingual-gemma2",
-    "OpenGVLab/InternVL2-1B":
-        "/nas_aisw/datasets/checkpoints/LLM/InternVL/v1.0/InternVL2-1B",
+    # OpenGVLab/InternVL3-1B（v0.27 替换 InternVL2-1B）：清单 MISS，待入库；
+    # 对应用例已在 MRV2_PIPELINE_PARALLELISM_ARGS deselect（见上）：
+    # "OpenGVLab/InternVL3-1B": "<NAS path 待入库后补>",
     "microsoft/Phi-3.5-vision-instruct":
         "/nas_aisw/datasets/checkpoints/LLM/Phi-3/v3.5/Phi-3.5-vision-instruct",
     "fixie-ai/ultravox-v0_5-llama-3_2-1b":

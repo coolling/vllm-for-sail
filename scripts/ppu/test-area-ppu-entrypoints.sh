@@ -70,6 +70,13 @@ EP_SINGLE_UNIT_ARGS=(
   --ignore=tests/entrypoints/generate
   # weight_transfer — LLM(NCCL weight transfer)，PPU 上未验证
   --ignore=tests/entrypoints/weight_transfer
+  # Run 38018057536：镜像缺少 cohere/rapidfuzz，以下 5 个文件 collection error。
+  # 先按失败文件禁用；依赖准备稳定后逐个恢复。
+  --ignore=tests/entrypoints/cohere/test_api_router.py
+  --ignore=tests/entrypoints/cohere/test_protocol.py
+  --ignore=tests/entrypoints/cohere/test_serving_conversion.py
+  --ignore=tests/entrypoints/cohere/test_serving_streaming.py
+  --ignore=tests/entrypoints/tool_parsers/test_openai_tool_parser.py
 )
 
 # 注：原快照 Step 2（v1_entrypoints，跑 tests/v1/entrypoints/）已删除——

@@ -41,6 +41,18 @@ ENGINE_SINGLE_BASIC_ARGS=(
   tests/test_sequence.py
   tests/test_logger.py
   tests/test_vllm_port.py
+  # Run 38018057536：离线模式把虚构 model id 解析成本地缓存路径，以下
+  # 10 例均报 LocalEntryNotFoundError，先逐例禁用。
+  --deselect "tests/engine/test_arg_utils.py::test_jit_monitor_verbose_arg"
+  --deselect "tests/engine/test_arg_utils.py::test_jit_monitor_mode_arg[warn]"
+  --deselect "tests/engine/test_arg_utils.py::test_jit_monitor_mode_arg[error]"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_device_ids_with_cvd_out_of_range"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_device_ids_with_cvd_resolve_to_physical_ids"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_device_ids_with_uuid_cvd_resolve_to_physical_ids"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_device_ids_with_uuid_args_resolve_to_physical_ids"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_device_ids_reject_mixed_integer_and_uuid_args"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_no_device_ids"
+  --deselect "tests/engine/test_arg_utils.py::TestDeviceIds::test_device_ids_reject_duplicates"
 )
 
 # Step 2: v1_engine — tests/v1/engine/ 整目录（V1 engine core/client/async/
@@ -374,18 +386,14 @@ _run_step() {
   fi
 }
 
-if [ "${MODE}" = "single" ]; then
+if [ "${MODE}" = "single" ] || [ "${MODE}" = "all" ]; then
   # Aone single 是 1-PPU pod：限 1 卡使 multi_gpu_test 自动 skip，语义对齐
   CUDA_VISIBLE_DEVICES=0 _run_step "engine_basic" 1 "${ENGINE_SINGLE_BASIC_ARGS[@]}"
   CUDA_VISIBLE_DEVICES=0 _run_step "v1_engine" 1 "${ENGINE_SINGLE_V1_ARGS[@]}"
   CUDA_VISIBLE_DEVICES=0 _run_step "v1_e2e_general" 1 "${ENGINE_SINGLE_E2E_ARGS[@]}"
-elif [ "${MODE}" = "multi" ]; then
+else  # multi
   echo "[mode] ERROR: area engine has no multi-mode steps configured" >&2
   exit 2
-else  # all
-  CUDA_VISIBLE_DEVICES=0 _run_step "engine_basic" 1 "${ENGINE_SINGLE_BASIC_ARGS[@]}"
-  CUDA_VISIBLE_DEVICES=0 _run_step "v1_engine" 1 "${ENGINE_SINGLE_V1_ARGS[@]}"
-  CUDA_VISIBLE_DEVICES=0 _run_step "v1_e2e_general" 1 "${ENGINE_SINGLE_E2E_ARGS[@]}"
 fi
 
 # ------------------------------------------------------------------------------
