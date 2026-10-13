@@ -89,7 +89,7 @@ jobs:
       (github.event.action != 'labeled' ||
        contains(fromJSON('["skip-human-review", "run-all"]'), github.event.label.name)) &&
       !contains(github.event.pull_request.labels.*.name, 'skip-human-review') &&
-      contains(fromJSON('["v0.27.0", "v0.23.0", "feat/gha-ppu-test"]'), github.base_ref)
+      contains(fromJSON('["v0.26.0", "v0.27.0", "v0.28.0", "feat/v0.27-ppu-ci"]'), github.base_ref)
     uses: flytiger-eco/.github/.github/workflows/human-review.yml@main
     secrets: inherit
 
@@ -107,7 +107,7 @@ jobs:
       (github.event.action != 'labeled' ||
        contains(fromJSON('["skip-human-review", "run-all"]'), github.event.label.name)) &&
       contains(github.event.pull_request.labels.*.name, 'skip-human-review') &&
-      contains(fromJSON('["v0.27.0", "v0.23.0", "feat/gha-ppu-test"]'), github.base_ref)
+      contains(fromJSON('["v0.26.0", "v0.27.0", "v0.28.0", "feat/v0.27-ppu-ci"]'), github.base_ref)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

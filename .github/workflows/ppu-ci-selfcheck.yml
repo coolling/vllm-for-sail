@@ -11,15 +11,15 @@ name: PPU CI Selfcheck
 
 on:
   push:
-    # feat/gha-ppu-test：开发期验证用，合入 v0.23.0 后移除
-    branches: [v0.27.0, v0.23.0, feat/gha-ppu-test]
+    # feat/v0.27-ppu-ci：v0.27 PPU CI 基线分支，CI 改动经此合入
+    branches: [v0.26.0, v0.27.0, v0.28.0, feat/v0.27-ppu-ci]
     paths:
       - ".github/workflows/ppu-ci-selfcheck.yml"
       - "scripts/ppu/**"
       - "tests/**"
   pull_request:
-    # feat/gha-ppu-test：开发期验证用，合入 v0.23.0 后移除
-    branches: [v0.27.0, v0.23.0, feat/gha-ppu-test]
+    # feat/v0.27-ppu-ci：v0.27 PPU CI 基线分支，CI 改动经此合入
+    branches: [v0.26.0, v0.27.0, v0.28.0, feat/v0.27-ppu-ci]
     paths:
       - ".github/workflows/ppu-ci-selfcheck.yml"
       - "scripts/ppu/**"
