@@ -70,6 +70,8 @@ EP_SINGLE_UNIT_ARGS=(
   --ignore=tests/entrypoints/generate
   # weight_transfer — LLM(NCCL weight transfer)，PPU 上未验证
   --ignore=tests/entrypoints/weight_transfer
+  # Run 38499841007: collection 阶段缺少 rapidfuzz。
+  --ignore=tests/entrypoints/tool_parsers/test_openai_tool_parser.py
 )
 
 # 注：原快照 Step 2（v1_entrypoints，跑 tests/v1/entrypoints/）已删除——
