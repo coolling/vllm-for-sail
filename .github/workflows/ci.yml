@@ -5,13 +5,16 @@
 # - precheck / ai-code-review / human-review 是 flytiger-eco/.github 的
 #   reusable workflow，本文件只做编排。
 # - 标签 skip-human-review：跳过真人审批，改走本地 skip-human-review job。
-# - 其他标签也会触发 run（pull_request 无法按标签名过滤），这类 run 全部跳过。
+# - human-review 受托管 runner 6h 上限约束；超时后有人 approve 会自动重跑。
+# - 其他标签及非 approve 的 review 也会触发 run，这类 run 全部跳过。
 
 name: CI Pipeline
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
+  pull_request_review:
+    types: [submitted]
 
 permissions:
   contents: read
@@ -19,15 +22,57 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number }}-${{ github.event.action == 'labeled' && github.event.label.name != 'skip-human-review' && 'noop' || 'main' }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number }}-${{ ((github.event.action == 'labeled' && github.event.label.name != 'skip-human-review') || (github.event_name == 'pull_request_review' && github.event.review.state != 'approved')) && 'noop' || 'main' }}
+  cancel-in-progress: ${{ github.event_name != 'pull_request_review' }}
 
 jobs:
+  # 判定是否执行流水线；approve 仅在本 commit 尚无审批通过时执行。
+  # fork PR 的 approve 不执行：area 的 fork 拦截只认 pull_request 事件。
+  check-run:
+    name: Check Whether to Run CI
+    if: >-
+      (github.event_name == 'pull_request' &&
+       (github.event.action != 'labeled' ||
+        github.event.label.name == 'skip-human-review')) ||
+      (github.event_name == 'pull_request_review' &&
+       github.event.review.state == 'approved')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      checks: read
+    outputs:
+      run: ${{ steps.check-run.outputs.run }}
+    steps:
+      - id: check-run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'skip-human-review') }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          run=true
+          if [[ "$EVENT" == pull_request_review ]]; then
+            run=false
+            if [[ "$SAME_REPO" == true && "$HAS_SKIP_LABEL" != true ]]; then
+              passed=$(gh api --paginate \
+                "repos/$REPO/commits/$HEAD_SHA/check-runs?filter=all&per_page=100" \
+                --jq '.check_runs[]
+                  | select(.conclusion == "success")
+                  | select(.name == "Human Review Gate / Human Review Gate"
+                           or .name == "Skip Human Review")
+                  | .id')
+              [[ -n "$passed" ]] || run=true
+            fi
+          fi
+          echo "run=$run" | tee -a "$GITHUB_OUTPUT"
+
   precheck:
     name: Pre-check
-    if: >-
-      github.event.action != 'labeled' ||
-      github.event.label.name == 'skip-human-review'
+    needs: check-run
+    if: needs.check-run.outputs.run == 'true'
     uses: flytiger-eco/.github/.github/workflows/user-precheck.yml@main
 
   smoke-test:
@@ -61,7 +106,7 @@ jobs:
     needs: [smoke-test, ai-code-review]
     if: >-
       !contains(github.event.pull_request.labels.*.name, 'skip-human-review') &&
-      contains(fromJSON('["v0.26.0", "v0.27.0", "v0.28.0"]'), github.base_ref)
+      contains(fromJSON('["v0.26.0", "v0.27.0", "v0.28.0"]'), github.event.pull_request.base.ref)
     uses: flytiger-eco/.github/.github/workflows/human-review.yml@main
     secrets: inherit
 
@@ -72,15 +117,15 @@ jobs:
     needs: [smoke-test, ai-code-review]
     if: >-
       contains(github.event.pull_request.labels.*.name, 'skip-human-review') &&
-      contains(fromJSON('["v0.26.0", "v0.27.0", "v0.28.0"]'), github.base_ref)
+      contains(fromJSON('["v0.26.0", "v0.27.0", "v0.28.0"]'), github.event.pull_request.base.ref)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Record skip human review
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           echo "✅ 已根据 skip-human-review 标签跳过 human review。"
           echo "PR   : $PR_URL"
@@ -123,10 +168,11 @@ jobs:
       wheel_artifact: ${{ needs.build-wheel.outputs.artifact_name }}
     secrets: inherit
 
-  # 聚合点：审批通道至少一个成功，其余 job 全部成功。
+  # 聚合点：审批通道至少一个成功，其余 job 全部成功；precheck 被跳过的 run 不出结论。
   ci:
     name: Full CI
     needs:
+      - check-run
       - precheck
       - smoke-test
       - ai-code-review
@@ -138,8 +184,8 @@ jobs:
       - ppu-benchmarks
     if: >-
       !cancelled() &&
-      (github.event.action != 'labeled' ||
-       github.event.label.name == 'skip-human-review')
+      (needs.precheck.result != 'skipped' ||
+       needs.check-run.result == 'failure')
     runs-on: ubuntu-latest
     steps:
       - name: Check all dependent job statuses
